@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { ArrowLeft, User, MapPin, CreditCard, FileText, AlertCircle } from "lucide-react"
+import { useUserProfile } from "@/hooks/use-user-profile"
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -21,45 +22,9 @@ export default function UserProfilePage() {
   const router = useRouter()
   const uniqueId = params.uniqueId as string
   
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [profile, setProfile] = useState<any>(null)
+  const { profile, isLoading, error, refresh } = useUserProfile(uniqueId)
 
-  useEffect(() => {
-    async function load() {
-      if (!uniqueId) return
-      setLoading(true)
-      setError(null)
-      setProfile(null)
-      try {
-        const token = localStorage.getItem("admin_token")
-        if (!token) throw new Error("No session")
-        const res = await fetch("/api/user-profile", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ unique_id: uniqueId }),
-        })
-        if (!res.ok) {
-          const t = await res.text()
-          throw new Error(t || "Failed to load profile")
-        }
-        const data = await res.json()
-        // Handle the enhanced API response structure: { status, message, result: { Userresult, kycdataresult, BankAccountresult, Debtresult } }
-        const profileData = data?.result || data?.profile || data?.data || data
-        setProfile(profileData)
-      } catch (err: any) {
-        setError(err.message || "Failed to load profile")
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [uniqueId])
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -77,7 +42,7 @@ export default function UserProfilePage() {
           <CardContent className="p-6 text-center">
             <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
             <h2 className="text-lg font-semibold mb-2">Error Loading Profile</h2>
-            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <p className="text-sm text-muted-foreground mb-4">{error.message || String(error)}</p>
             <Button onClick={() => router.back()}>Go Back</Button>
           </CardContent>
         </Card>
@@ -96,7 +61,7 @@ export default function UserProfilePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">User Profile</h1>
           <p className="text-muted-foreground">
-            {profile?.Userresult?.name || profile?.Userresult?.full_name || "Unknown User"}
+            {profile?.Userresult?.name || "Unknown User"}
           </p>
         </div>
       </div>
@@ -111,7 +76,7 @@ export default function UserProfilePage() {
                 <CardTitle className="text-primary">User Information</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3">
-                <InfoRow label="Name" value={profile.Userresult.name || profile.Userresult.full_name || "-"} />
+                <InfoRow label="Name" value={profile.Userresult.name || "-"} />
                 <InfoRow label="Email" value={profile.Userresult.email || "-"} />
                 <InfoRow label="Mobile" value={profile.Userresult.mobile || "-"} />
                 <InfoRow label="Unique ID" value={profile.Userresult.unique_id || "-"} />
