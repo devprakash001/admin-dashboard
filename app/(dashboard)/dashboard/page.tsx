@@ -27,7 +27,7 @@ export default function DashboardHome() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome to the 19Pays Admin Dashboard</p>
+        <p className="text-muted-foreground">Welcome to the Admin Dashboard</p>
       </div>
       
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -9,7 +9,7 @@ const _geist = Inter({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "19Pays Admin Dashboard",
+  title: "Admin Dashboard",
   description: "Created by Dev",
   generator: "Dev Praksh Singh",
 }

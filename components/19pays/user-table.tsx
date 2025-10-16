@@ -1,12 +1,12 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import useSWR from "swr"
+import { useRouter } from "next/navigation"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
-import { UserProfileModal } from "./user-profile-modal"
 
 type User = {
   _id?: string
@@ -54,8 +54,7 @@ async function fetchUsers(): Promise<User[]> {
 
 export function UsersTable({ search }: { search?: string }) {
   const { data, error, isLoading, mutate } = useSWR("users", fetchUsers)
-  const [open, setOpen] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const router = useRouter()
 
   const filtered = useMemo(() => {
     if (!data) return []
@@ -113,15 +112,16 @@ export function UsersTable({ search }: { search?: string }) {
                         <div><strong>Mobile:</strong> {mobile}</div>
                         <div><strong>Location:</strong> {location}</div>
                         <div><strong>ID:</strong> {uid}</div>
+                        <div className="flex gap-1 pt-1">
+                          {isVerified && <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Email ✓</span>}
+                          {isVerifiedMobile && <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">Mobile ✓</span>}
+                        </div>
                       </div>
                       <div className="pt-2">
                         <Button
                           size="sm"
                           className="w-full"
-                          onClick={() => {
-                            setSelectedId(String(uid))
-                            setOpen(true)
-                          }}
+                          onClick={() => router.push(`/user-profile/${uid}`)}
                         >
                           View Profile
                         </Button>
@@ -178,10 +178,7 @@ export function UsersTable({ search }: { search?: string }) {
                       <TableCell className="text-right">
                         <Button
                           size="sm"
-                          onClick={() => {
-                            setSelectedId(String(uid))
-                            setOpen(true)
-                          }}
+                          onClick={() => router.push(`/user-profile/${uid}`)}
                         >
                           View Profile
                         </Button>
@@ -201,8 +198,6 @@ export function UsersTable({ search }: { search?: string }) {
           </div>
         )}
       </CardContent>
-
-      <UserProfileModal open={open} onOpenChange={setOpen} uniqueId={selectedId} />
     </Card>
   )
 }

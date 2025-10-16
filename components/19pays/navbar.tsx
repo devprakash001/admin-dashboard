@@ -32,7 +32,7 @@ function MobileSidebarContent() {
   return (
     <>
       <div className="h-14 flex items-center px-4 border-b">
-        <span className="font-semibold">19Pays Admin</span>
+        <span className="font-semibold">Admin</span>
       </div>
       <nav className="p-2">
         <ul className="grid gap-1">
