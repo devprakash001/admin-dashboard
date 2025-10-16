@@ -45,35 +45,41 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-dvh flex items-center justify-center bg-background">
+    <main className="min-h-dvh flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm shadow-md">
-        <CardHeader>
-          <CardTitle className="text-balance">19Pays Admin</CardTitle>
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold">19Pays Admin</CardTitle>
           <CardDescription>Sign in to manage the platform</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="grid gap-4">
             <div className="grid gap-2">
-              <label className="text-sm">Email</label>
+              <label className="text-sm font-medium">Email</label>
               <Input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@19pays.com"
+                className="w-full"
               />
             </div>
             <div className="grid gap-2">
-              <label className="text-sm">Password</label>
+              <label className="text-sm font-medium">Password</label>
               <Input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
+                className="w-full"
               />
             </div>
-            {error ? <p className="text-destructive text-sm">{error}</p> : null}
+            {error ? (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3">
+                <p className="text-destructive text-sm">{error}</p>
+              </div>
+            ) : null}
             <Button type="submit" disabled={loading} className="w-full">
               {loading ? "Signing in…" : "Sign in"}
             </Button>

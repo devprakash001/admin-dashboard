@@ -9,9 +9,14 @@ const _geist = Inter({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Admin Dashboard",
+  title: "19Pays Admin Dashboard",
   description: "Created by Dev",
   generator: "Dev Praksh Singh",
+}
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
 }
 
 export default function RootLayout({

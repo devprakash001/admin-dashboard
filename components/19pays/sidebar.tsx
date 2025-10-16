@@ -11,10 +11,10 @@ const links = [
   { href: "/settings", label: "Settings" },
 ]
 
-export function Sidebar() {
+function SidebarContent() {
   const pathname = usePathname()
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col border-r bg-card/40">
+    <>
       <div className="h-14 flex items-center px-4 border-b">
         <span className="font-semibold">19Pays Admin</span>
       </div>
@@ -36,6 +36,15 @@ export function Sidebar() {
           })}
         </ul>
       </nav>
+    </>
+  )
+}
+
+export function Sidebar() {
+  // Only show sidebar on desktop, mobile menu is handled in navbar
+  return (
+    <aside className="hidden md:flex md:w-64 md:flex-col border-r bg-card/40">
+      <SidebarContent />
     </aside>
   )
 }
