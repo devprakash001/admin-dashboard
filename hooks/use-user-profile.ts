@@ -118,8 +118,18 @@ async function postJson<T>(url: string, body: unknown, token?: string): Promise<
     body: JSON.stringify(body),
   })
   if (!res.ok) {
+    // Try to return a friendly message from JSON if possible
     const text = await res.text()
-    throw new Error(text || `Request failed with ${res.status}`)
+    let message = text || `Request failed with ${res.status}`
+    try {
+      const data = JSON.parse(text)
+      if (data?.error) message = data.error
+      else if (data?.message) message = data.message
+      else if (typeof data === "string") message = data
+    } catch {
+      // ignore JSON parse failure and use raw text
+    }
+    throw new Error(message)
   }
   return (await res.json()) as T
 }
@@ -130,7 +140,7 @@ export function useUserProfile(uniqueId: string | undefined) {
   // Read token on client side; guard SWR key if missing
   const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null
 
-  const shouldFetch = Boolean(uniqueId)
+  const shouldFetch = Boolean(uniqueId && token)
   const key: SwrKey | null = shouldFetch ? ["user-profile", uniqueId, token] : null
 
   const { data, error, isLoading, mutate } = useSWR<ProfileResponse>(
@@ -142,6 +152,7 @@ export function useUserProfile(uniqueId: string | undefined) {
       return await postJson<ProfileResponse>(
         "/api/user-profile",
         { unique_id: id, unique_user_id: id },
+        t as string,
       )
     },
     {

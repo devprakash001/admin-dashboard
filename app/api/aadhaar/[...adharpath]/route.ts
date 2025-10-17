@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server"
 
-export async function GET(_request: Request, context: { params: Promise<{ adharpath: string[] }> }) {
+export async function GET(request: Request, context: { params: Promise<{ adharpath: string[] }> }) {
   try {
+    const auth = request.headers.get("authorization")
+    if (!auth || !auth.toLowerCase().startsWith("bearer ")) {
+      return new NextResponse("Authorization required", { status: 401 })
+    }
     const { adharpath } = await context.params
     const joined = Array.isArray(adharpath) ? adharpath.join("/") : String(adharpath || "")
     if (!joined) return new NextResponse("Missing adharpath", { status: 400 })
 
     const upstream = `https://19pays-api.oneninelabs.com/api/aadhar/${encodeURI(joined)}`
-    const res = await fetch(upstream)
+    const res = await fetch(upstream, {
+      headers: {
+        Authorization: auth,
+      },
+    })
     if (!res.ok) {
       const text = await res.text()
       return new NextResponse(text || "Failed to fetch image", { status: res.status })

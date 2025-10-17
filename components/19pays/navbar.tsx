@@ -27,7 +27,7 @@ const links = [
   { href: "/settings", label: "Settings" },
 ]
 
-function MobileSidebarContent() {
+function MobileSidebarContent({ onLinkClick }: { onLinkClick: () => void }) {
   const pathname = usePathname()
   return (
     <>
@@ -42,6 +42,7 @@ function MobileSidebarContent() {
               <li key={l.href}>
                 <Link
                   href={l.href}
+                  onClick={onLinkClick}
                   className={cn("block rounded-md px-3 py-2 text-sm hover:bg-accent", active ? "bg-accent" : "")}
                   aria-current={active ? "page" : undefined}
                 >
@@ -61,11 +62,16 @@ export function Navbar({ onSearch }: { onSearch?: (q: string) => void }) {
   const pathname = usePathname()
   const token = useAuthToken()
   const [q, setQ] = useState("")
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const isMobile = useIsMobile()
 
   useEffect(() => {
     setQ("")
   }, [pathname])
+
+  const handleMobileLinkClick = () => {
+    setIsMobileSidebarOpen(false)
+  }
 
   function logout() {
     clearToken()
@@ -77,7 +83,7 @@ export function Navbar({ onSearch }: { onSearch?: (q: string) => void }) {
       <div className="flex items-center gap-2">
         {/* Mobile Menu Button */}
         {isMobile && (
-          <Sheet>
+          <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" size="sm" className="md:hidden">
                 <Menu className="h-4 w-4" />
@@ -85,7 +91,7 @@ export function Navbar({ onSearch }: { onSearch?: (q: string) => void }) {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
-              <MobileSidebarContent />
+              <MobileSidebarContent onLinkClick={handleMobileLinkClick} />
             </SheetContent>
           </Sheet>
         )}

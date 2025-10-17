@@ -3,10 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowLeft, User, MapPin, CreditCard, FileText, AlertCircle } from "lucide-react"
+import { ArrowLeft, User, MapPin, CreditCard, FileText, AlertCircle, Download, Eye } from "lucide-react"
 import { useUserProfile } from "@/hooks/use-user-profile"
+import { useAuthToken } from "@/hooks/use-auth"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { toast } from "@/components/ui/use-toast"
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -21,8 +25,72 @@ export default function UserProfilePage() {
   const params = useParams()
   const router = useRouter()
   const uniqueId = params.uniqueId as string
+  const token = useAuthToken()
+  const isAdmin = !!token
   
   const { profile, isLoading, error, refresh } = useUserProfile(uniqueId)
+  const [adjustedAmount, setAdjustedAmount] = useState<string>("")
+  const [debtUpdating, setDebtUpdating] = useState<boolean>(false)
+
+  async function handleDebtUpdate(approved: boolean) {
+    if (!token || !profile?.Debtresult?._id) {
+      toast({ title: "Not allowed", description: "Admin authorization required", variant: "destructive" })
+      return
+    }
+    setDebtUpdating(true)
+    try {
+      const amt = Number(adjustedAmount)
+      const body = {
+        unique_user_id: uniqueId,
+        debtid: profile.Debtresult._id,
+        approved,
+        adjustedAmount: Number.isFinite(amt) && amt > 0 ? Math.floor(amt) : 0,
+      }
+      const res = await fetch("/api/updateuserdebt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      })
+      let data: any = {}
+      let text = ""
+      try {
+        text = await res.text()
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        // non-JSON body
+      }
+      if (!res.ok) {
+        const msg = data?.error || data?.message || text || `Failed to update debt (${res.status})`
+        throw new Error(msg)
+      }
+      const successMsg = data?.message || (approved ? "Debt approved" : "Debt rejected")
+      toast({ title: successMsg })
+      setAdjustedAmount("")
+      refresh()
+    } catch (e: any) {
+      toast({ title: "Update failed", description: e?.message || String(e), variant: "destructive" })
+    } finally {
+      setDebtUpdating(false)
+    }
+  }
+
+  // If not logged in, show a friendly prompt instead of raw errors
+  if (!token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 text-center">
+            <h2 className="text-lg font-semibold mb-2">Login Required</h2>
+            <p className="text-sm text-muted-foreground mb-4">Please log in as an admin to view this profile.</p>
+            <Button onClick={() => router.replace("/login")}>Go to Login</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (
@@ -36,14 +104,22 @@ export default function UserProfilePage() {
   }
 
   if (error) {
+    const raw = String(error?.message || "")
+    const friendly =
+      /authorization token required|bearer token|unauthorized|401/i.test(raw)
+        ? "Authorization required. Please log in again."
+        : raw || "Failed to load profile"
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardContent className="p-6 text-center">
             <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
             <h2 className="text-lg font-semibold mb-2">Error Loading Profile</h2>
-            <p className="text-sm text-muted-foreground mb-4">{error.message || String(error)}</p>
-            <Button onClick={() => router.back()}>Go Back</Button>
+            <p className="text-sm text-muted-foreground mb-4">{friendly}</p>
+            <div className="flex gap-2 justify-center">
+              <Button variant="outline" onClick={() => router.back()}>Go Back</Button>
+              <Button onClick={() => router.replace("/login")}>Go to Login</Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -180,9 +256,40 @@ export default function UserProfilePage() {
                   label="Created" 
                   value={profile.kycdataresult.createdAt ? new Date(profile.kycdataresult.createdAt).toLocaleDateString() : "-"} 
                 />
-                {profile.kycdataresult.adharpath ? (
-                  <AadhaarCanvas adharpath={profile.kycdataresult.adharpath} watermark={profile.Userresult?.unique_id || "19Pays"} />
-                ) : null}
+                {profile.kycdataresult.adharpath && isAdmin && (
+                  <div className="mt-4 p-4 border rounded-lg bg-muted/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-medium text-muted-foreground">Aadhaar Document</h4>
+                      <div className="flex gap-2">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
+                            <DialogHeader>
+                              <DialogTitle>Aadhaar Document</DialogTitle>
+                            </DialogHeader>
+                            <AadhaarCanvas adharpath={profile.kycdataresult.adharpath} watermark={profile.Userresult?.unique_id || "19Pays"} />
+                          </DialogContent>
+                        </Dialog>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => downloadAadhaar(profile.kycdataresult.adharpath, profile.Userresult?.unique_id || "19Pays")}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Admin access required to view and download Aadhaar documents.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -268,6 +375,24 @@ export default function UserProfilePage() {
                   label="Created" 
                   value={profile.Debtresult.createdAt ? new Date(profile.Debtresult.createdAt).toLocaleDateString() : "-"} 
                 />
+                {isAdmin && (
+                  <div className="mt-2 grid gap-2">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="Adjusted amount (optional)"
+                        value={adjustedAmount}
+                        onChange={(e) => setAdjustedAmount(e.target.value)}
+                        className="max-w-[240px]"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button disabled={debtUpdating} onClick={() => handleDebtUpdate(true)}>Approve</Button>
+                      <Button variant="destructive" disabled={debtUpdating} onClick={() => handleDebtUpdate(false)}>Reject</Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -307,6 +432,34 @@ export default function UserProfilePage() {
       )}
     </div>
   )
+}
+
+async function downloadAadhaar(adharpath: string, watermark: string) {
+  try {
+    const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null
+    const response = await fetch(`/api/aadhaar/${encodeURI(adharpath)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+    if (!response.ok) throw new Error('Failed to fetch Aadhaar document')
+    
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    
+    // Determine file extension based on content type
+    const contentType = response.headers.get('content-type') || ''
+    const extension = contentType.includes('pdf') ? 'pdf' : 'jpg'
+    
+    link.download = `aadhaar_${watermark}_${Date.now()}.${extension}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Error downloading Aadhaar:', error)
+    alert('Failed to download Aadhaar document')
+  }
 }
 
 function AadhaarCanvas({ adharpath, watermark }: { adharpath: string; watermark: string }) {
