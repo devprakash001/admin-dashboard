@@ -48,7 +48,7 @@ export default function LoginPage() {
     <main className="min-h-dvh flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm shadow-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">19Pays Admin</CardTitle>
+          <CardTitle className="text-2xl font-bold">Admin</CardTitle>
           <CardDescription>Sign in to manage the platform</CardDescription>
         </CardHeader>
         <CardContent>

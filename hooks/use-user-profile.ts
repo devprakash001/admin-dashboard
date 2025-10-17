@@ -142,7 +142,6 @@ export function useUserProfile(uniqueId: string | undefined) {
       return await postJson<ProfileResponse>(
         "/api/user-profile",
         { unique_id: id, unique_user_id: id },
-        t
       )
     },
     {
