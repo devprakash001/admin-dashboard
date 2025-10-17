@@ -5,8 +5,10 @@ import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowLeft, User, MapPin, CreditCard, FileText, AlertCircle } from "lucide-react"
+import { ArrowLeft, User, MapPin, CreditCard, FileText, AlertCircle, Download, Eye } from "lucide-react"
 import { useUserProfile } from "@/hooks/use-user-profile"
+import { useAuthToken } from "@/hooks/use-auth"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -21,6 +23,8 @@ export default function UserProfilePage() {
   const params = useParams()
   const router = useRouter()
   const uniqueId = params.uniqueId as string
+  const token = useAuthToken()
+  const isAdmin = !!token
   
   const { profile, isLoading, error, refresh } = useUserProfile(uniqueId)
 
@@ -180,9 +184,40 @@ export default function UserProfilePage() {
                   label="Created" 
                   value={profile.kycdataresult.createdAt ? new Date(profile.kycdataresult.createdAt).toLocaleDateString() : "-"} 
                 />
-                {profile.kycdataresult.adharpath ? (
-                  <AadhaarCanvas adharpath={profile.kycdataresult.adharpath} watermark={profile.Userresult?.unique_id || "19Pays"} />
-                ) : null}
+                {profile.kycdataresult.adharpath && isAdmin && (
+                  <div className="mt-4 p-4 border rounded-lg bg-muted/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-medium text-muted-foreground">Aadhaar Document</h4>
+                      <div className="flex gap-2">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
+                            <DialogHeader>
+                              <DialogTitle>Aadhaar Document</DialogTitle>
+                            </DialogHeader>
+                            <AadhaarCanvas adharpath={profile.kycdataresult.adharpath} watermark={profile.Userresult?.unique_id || "19Pays"} />
+                          </DialogContent>
+                        </Dialog>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => downloadAadhaar(profile.kycdataresult.adharpath, profile.Userresult?.unique_id || "19Pays")}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Admin access required to view and download Aadhaar documents.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -307,6 +342,31 @@ export default function UserProfilePage() {
       )}
     </div>
   )
+}
+
+async function downloadAadhaar(adharpath: string, watermark: string) {
+  try {
+    const response = await fetch(`/api/aadhaar/${encodeURI(adharpath)}`)
+    if (!response.ok) throw new Error('Failed to fetch Aadhaar document')
+    
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    
+    // Determine file extension based on content type
+    const contentType = response.headers.get('content-type') || ''
+    const extension = contentType.includes('pdf') ? 'pdf' : 'jpg'
+    
+    link.download = `aadhaar_${watermark}_${Date.now()}.${extension}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Error downloading Aadhaar:', error)
+    alert('Failed to download Aadhaar document')
+  }
 }
 
 function AadhaarCanvas({ adharpath, watermark }: { adharpath: string; watermark: string }) {

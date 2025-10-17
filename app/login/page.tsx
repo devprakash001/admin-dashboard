@@ -27,8 +27,25 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       })
       if (!res.ok) {
-        const t = await res.text()
-        throw new Error(t || "Login failed")
+        let errorMessage = "Login failed"
+        try {
+          const errorData = await res.json()
+          // Handle different error response formats
+          if (errorData.error) {
+            errorMessage = errorData.error
+          } else if (errorData.message) {
+            errorMessage = errorData.message
+          } else if (typeof errorData === 'string') {
+            errorMessage = errorData
+          } else if (errorData.raw) {
+            errorMessage = errorData.raw
+          }
+        } catch {
+          // If JSON parsing fails, try to get text
+          const text = await res.text()
+          errorMessage = text || "Login failed"
+        }
+        throw new Error(errorMessage)
       }
       const data = await res.json()
       // Attempt common token shapes
@@ -38,7 +55,31 @@ export default function LoginPage() {
       toast({ title: "Logged in", description: "Welcome back!" })
       router.replace("/dashboard")
     } catch (err: any) {
-      setError(err.message || "Login failed")
+      // Provide user-friendly error messages
+      let errorMessage = "Login failed"
+      
+      if (err.message) {
+        // Clean up common error messages
+        const message = err.message.toLowerCase()
+        if (message.includes('unauthorized') || message.includes('invalid credentials')) {
+          errorMessage = "Invalid email or password"
+        } else if (message.includes('network') || message.includes('fetch')) {
+          errorMessage = "Network error. Please check your connection and try again."
+        } else if (message.includes('timeout')) {
+          errorMessage = "Request timed out. Please try again."
+        } else if (message.includes('server') || message.includes('500')) {
+          errorMessage = "Server error. Please try again later."
+        } else if (message.includes('no token')) {
+          errorMessage = "Authentication failed. Please check your credentials."
+        } else {
+          // For other errors, show the original message if it's not JSON
+          if (!err.message.startsWith('{') && !err.message.startsWith('[')) {
+            errorMessage = err.message
+          }
+        }
+      }
+      
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -75,14 +116,14 @@ export default function LoginPage() {
                 className="w-full"
               />
             </div>
-            {error ? (
-              <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3">
-                <p className="text-destructive text-sm">{error}</p>
-              </div>
-            ) : null}
             <Button type="submit" disabled={loading} className="w-full">
               {loading ? "Signing in…" : "Sign in"}
             </Button>
+            {error ? (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3 mt-2">
+                <p className="text-destructive text-sm">{error}</p>
+              </div>
+            ) : null}
           </form>
         </CardContent>
       </Card>
