@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -180,6 +180,9 @@ export default function UserProfilePage() {
                   label="Created" 
                   value={profile.kycdataresult.createdAt ? new Date(profile.kycdataresult.createdAt).toLocaleDateString() : "-"} 
                 />
+                {profile.kycdataresult.adharpath ? (
+                  <AadhaarCanvas adharpath={profile.kycdataresult.adharpath} watermark={profile.Userresult?.unique_id || "19Pays"} />
+                ) : null}
               </CardContent>
             </Card>
           )}
@@ -304,4 +307,129 @@ export default function UserProfilePage() {
       )}
     </div>
   )
+}
+
+function AadhaarCanvas({ adharpath, watermark }: { adharpath: string; watermark: string }) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const src = useMemo(() => `/api/aadhaar/${encodeURI(adharpath)}`, [adharpath])
+
+  useEffect(() => {
+    let aborted = false
+    async function render() {
+      try {
+        // Fetch the resource to detect content-type
+        const res = await fetch(src)
+        if (!res.ok) throw new Error("Failed to fetch Aadhaar file")
+        const contentType = res.headers.get("content-type") || ""
+        const arrayBuf = await res.arrayBuffer()
+        if (aborted) return
+        if (contentType.includes("pdf")) {
+          const pdfjsLib = await loadPdfJsFromCdn()
+          pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js"
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise
+          const page = await pdf.getPage(1)
+          const viewport = page.getViewport({ scale: 1.5 })
+          const canvas = canvasRef.current
+          if (!canvas) return
+          const ctx = canvas.getContext("2d")
+          if (!ctx) return
+          canvas.width = viewport.width
+          canvas.height = viewport.height
+          await page.render({ canvasContext: ctx, viewport }).promise
+          // add watermark
+          addWatermark(ctx, canvas.width, canvas.height, watermark)
+        } else {
+          const img = new Image()
+          img.crossOrigin = "anonymous"
+          img.onload = () => {
+            const canvas = canvasRef.current
+            if (!canvas) return
+            const ctx = canvas.getContext("2d")
+            if (!ctx) return
+            const maxWidth = 1200
+            const scale = Math.min(1, maxWidth / (img.width || maxWidth))
+            const w = Math.max(1, Math.floor((img.width || maxWidth) * scale))
+            const h = Math.max(1, Math.floor((img.height || maxWidth) * scale))
+            canvas.width = w
+            canvas.height = h
+            ctx.drawImage(img, 0, 0, w, h)
+            addWatermark(ctx, w, h, watermark)
+          }
+          const blob = new Blob([arrayBuf])
+          img.src = URL.createObjectURL(blob)
+        }
+      } catch (e) {
+        // silently ignore, canvas will remain empty
+      }
+    }
+    function addWatermark(ctx: CanvasRenderingContext2D, w: number, h: number, text: string) {
+      const wm = text || "19Pays"
+      ctx.globalAlpha = 0.15
+      ctx.fillStyle = "#000"
+      ctx.textAlign = "left"
+      ctx.textBaseline = "top"
+      const fontSize = Math.max(12, Math.floor(w / 24))
+      ctx.font = `${fontSize}px sans-serif`
+      const stepX = Math.floor(fontSize * 8)
+      const stepY = Math.floor(fontSize * 5)
+      ctx.rotate((-15 * Math.PI) / 180)
+      for (let y = -stepY; y < h + stepY; y += stepY) {
+        for (let x = -stepX; x < w + stepX; x += stepX) {
+          ctx.fillText(wm, x, y)
+        }
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.globalAlpha = 1
+    }
+    render()
+    return () => {
+      aborted = true
+    }
+  }, [src, watermark])
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const block = (e: Event) => e.preventDefault()
+    el.addEventListener("contextmenu", block)
+    el.addEventListener("dragstart", block)
+    el.addEventListener("pointerdown", block)
+    document.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).ctrlKey || (e as KeyboardEvent).metaKey) {
+        const key = (e as KeyboardEvent).key.toLowerCase()
+        if (key === "s" || key === "p") e.preventDefault()
+      }
+    })
+    return () => {
+      el.removeEventListener("contextmenu", block)
+      el.removeEventListener("dragstart", block)
+      el.removeEventListener("pointerdown", block)
+    }
+  }, [])
+
+  return (
+    <div ref={containerRef} className="grid gap-2 select-none">
+      <span className="text-sm text-muted-foreground font-medium">Aadhaar Image</span>
+      <div className="rounded-md border p-2 bg-muted/20">
+        <canvas ref={canvasRef} className="w-full h-auto rounded-md" />
+        <p className="mt-2 text-xs text-muted-foreground">Viewing only. Download/print is disabled.</p>
+      </div>
+    </div>
+  )
+}
+
+async function loadPdfJsFromCdn(): Promise<any> {
+  if (typeof window === "undefined") throw new Error("No window")
+  const w = window as any
+  if (w.pdfjsLib) return w.pdfjsLib
+  await new Promise<void>((resolve, reject) => {
+    const s = document.createElement("script")
+    s.src = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"
+    s.async = true
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error("Failed to load pdf.js"))
+    document.head.appendChild(s)
+  })
+  return (window as any).pdfjsLib
 }
