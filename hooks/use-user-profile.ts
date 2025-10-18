@@ -108,30 +108,28 @@ export interface ProfileResponse {
   result: ProfileResult
 }
 
+import { authenticatedFetch } from "./use-auth"
+
 async function postJson<T>(url: string, body: unknown, token?: string): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authenticatedFetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
     body: JSON.stringify(body),
   })
-  if (!res.ok) {
-    // Try to return a friendly message from JSON if possible
-    const text = await res.text()
-    let message = text || `Request failed with ${res.status}`
-    try {
-      const data = JSON.parse(text)
-      if (data?.error) message = data.error
-      else if (data?.message) message = data.message
-      else if (typeof data === "string") message = data
-    } catch {
-      // ignore JSON parse failure and use raw text
-    }
-    throw new Error(message)
+  
+  const text = await res.text()
+  let message = text || `Request failed with ${res.status}`
+  let data: any = {}
+  
+  try {
+    data = JSON.parse(text)
+    if (data?.error) message = data.error
+    else if (data?.message) message = data.message
+    else if (typeof data === "string") message = data
+  } catch {
+    // ignore JSON parse failure and use raw text
   }
-  return (await res.json()) as T
+  
+  return data as T
 }
 
 type SwrKey = ["user-profile", string | undefined, string | null]

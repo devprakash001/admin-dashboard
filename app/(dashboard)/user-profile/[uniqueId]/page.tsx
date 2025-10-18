@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { ArrowLeft, User, MapPin, CreditCard, FileText, AlertCircle, Download, Eye } from "lucide-react"
 import { useUserProfile } from "@/hooks/use-user-profile"
-import { useAuthToken } from "@/hooks/use-auth"
+import { useAuthToken, authenticatedFetch } from "@/hooks/use-auth"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/use-toast"
 
@@ -46,12 +46,8 @@ export default function UserProfilePage() {
         approved,
         adjustedAmount: Number.isFinite(amt) && amt > 0 ? Math.floor(amt) : 0,
       }
-      const res = await fetch("/api/updateuserdebt", {
+      const res = await authenticatedFetch("/api/updateuserdebt", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify(body),
       })
       let data: any = {}
@@ -215,6 +211,7 @@ export default function UserProfilePage() {
                 <CardTitle className="text-blue-600">Location</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3">
+                <InfoRow label="IP Address" value={profile.Userresult.ipAddress || "-"} />
                 <InfoRow label="City" value={profile.Userresult.location.city || "-"} />
                 <InfoRow label="Region" value={profile.Userresult.location.region || "-"} />
                 <InfoRow label="Country" value={profile.Userresult.location.country || "-"} />
@@ -272,7 +269,7 @@ export default function UserProfilePage() {
                             <DialogHeader>
                               <DialogTitle>Aadhaar Document</DialogTitle>
                             </DialogHeader>
-                            <AadhaarCanvas adharpath={profile.kycdataresult.adharpath} watermark={profile.Userresult?.unique_id || "19Pays"} />
+                            <AadhaarViewer adharpath={profile.kycdataresult.adharpath} watermark={profile.Userresult?.unique_id || "19Pays"} />
                           </DialogContent>
                         </Dialog>
                         <Button 
@@ -404,7 +401,6 @@ export default function UserProfilePage() {
                 <CardTitle>Account Details</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3">
-                <InfoRow label="IP Address" value={profile.Userresult.ipAddress || "-"} />
                 <InfoRow 
                   label="Created" 
                   value={profile.Userresult.createdAt ? new Date(profile.Userresult.createdAt).toLocaleDateString() : "-"} 
@@ -436,10 +432,7 @@ export default function UserProfilePage() {
 
 async function downloadAadhaar(adharpath: string, watermark: string) {
   try {
-    const token = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null
-    const response = await fetch(`/api/aadhaar/${encodeURI(adharpath)}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
+    const response = await authenticatedFetch(`/api/aadhaar/${encodeURI(adharpath)}`)
     if (!response.ok) throw new Error('Failed to fetch Aadhaar document')
     
     const blob = await response.blob()
@@ -462,127 +455,137 @@ async function downloadAadhaar(adharpath: string, watermark: string) {
   }
 }
 
-function AadhaarCanvas({ adharpath, watermark }: { adharpath: string; watermark: string }) {
+function AadhaarViewer({ adharpath, watermark }: { adharpath: string; watermark: string }) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const src = useMemo(() => `/api/aadhaar/${encodeURI(adharpath)}`, [adharpath])
 
   useEffect(() => {
     let aborted = false
-    async function render() {
+    
+    async function loadAadhaar() {
       try {
-        // Fetch the resource to detect content-type
-        const res = await fetch(src)
-        if (!res.ok) throw new Error("Failed to fetch Aadhaar file")
-        const contentType = res.headers.get("content-type") || ""
-        const arrayBuf = await res.arrayBuffer()
+        setLoading(true)
+        setError(null)
+        
+        console.log('Loading Aadhaar:', adharpath)
+        const response = await authenticatedFetch(`/api/aadhaar/${encodeURI(adharpath)}`)
+        console.log('Aadhaar response:', response.status, response.headers.get('content-type'))
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('Aadhaar fetch error:', errorText)
+          throw new Error(`Failed to fetch Aadhaar file: ${response.status}`)
+        }
+        
+        const contentType = response.headers.get("content-type") || ""
+        const blob = await response.blob()
+        console.log('Aadhaar blob size:', blob.size, 'type:', contentType)
+        
         if (aborted) return
-        if (contentType.includes("pdf")) {
-          const pdfjsLib = await loadPdfJsFromCdn()
-          pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js"
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise
-          const page = await pdf.getPage(1)
-          const viewport = page.getViewport({ scale: 1.5 })
-          const canvas = canvasRef.current
-          if (!canvas) return
-          const ctx = canvas.getContext("2d")
-          if (!ctx) return
-          canvas.width = viewport.width
-          canvas.height = viewport.height
-          await page.render({ canvasContext: ctx, viewport }).promise
-          // add watermark
-          addWatermark(ctx, canvas.width, canvas.height, watermark)
-        } else {
-          const img = new Image()
-          img.crossOrigin = "anonymous"
-          img.onload = () => {
-            const canvas = canvasRef.current
-            if (!canvas) return
-            const ctx = canvas.getContext("2d")
-            if (!ctx) return
-            const maxWidth = 1200
-            const scale = Math.min(1, maxWidth / (img.width || maxWidth))
-            const w = Math.max(1, Math.floor((img.width || maxWidth) * scale))
-            const h = Math.max(1, Math.floor((img.height || maxWidth) * scale))
-            canvas.width = w
-            canvas.height = h
-            ctx.drawImage(img, 0, 0, w, h)
-            addWatermark(ctx, w, h, watermark)
-          }
-          const blob = new Blob([arrayBuf])
-          img.src = URL.createObjectURL(blob)
+        
+        // Create blob URL for both PDFs and images
+        const blobUrl = URL.createObjectURL(blob)
+        console.log('Created blob URL:', blobUrl)
+        setImageUrl(blobUrl)
+      } catch (e: any) {
+        console.error('Aadhaar loading error:', e)
+        if (!aborted) {
+          setError(e.message || "Failed to load Aadhaar document")
         }
-      } catch (e) {
-        // silently ignore, canvas will remain empty
-      }
-    }
-    function addWatermark(ctx: CanvasRenderingContext2D, w: number, h: number, text: string) {
-      const wm = text || "19Pays"
-      ctx.globalAlpha = 0.15
-      ctx.fillStyle = "#000"
-      ctx.textAlign = "left"
-      ctx.textBaseline = "top"
-      const fontSize = Math.max(12, Math.floor(w / 24))
-      ctx.font = `${fontSize}px sans-serif`
-      const stepX = Math.floor(fontSize * 8)
-      const stepY = Math.floor(fontSize * 5)
-      ctx.rotate((-15 * Math.PI) / 180)
-      for (let y = -stepY; y < h + stepY; y += stepY) {
-        for (let x = -stepX; x < w + stepX; x += stepX) {
-          ctx.fillText(wm, x, y)
+      } finally {
+        if (!aborted) {
+          setLoading(false)
         }
       }
-      ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.globalAlpha = 1
     }
-    render()
+    
+    loadAadhaar()
+    
     return () => {
       aborted = true
+      if (imageUrl) {
+        URL.revokeObjectURL(imageUrl)
+      }
     }
-  }, [src, watermark])
+  }, [adharpath])
 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    
     const block = (e: Event) => e.preventDefault()
     el.addEventListener("contextmenu", block)
     el.addEventListener("dragstart", block)
-    el.addEventListener("pointerdown", block)
-    document.addEventListener("keydown", (e) => {
-      if ((e as KeyboardEvent).ctrlKey || (e as KeyboardEvent).metaKey) {
-        const key = (e as KeyboardEvent).key.toLowerCase()
-        if (key === "s" || key === "p") e.preventDefault()
-      }
-    })
+    
     return () => {
       el.removeEventListener("contextmenu", block)
       el.removeEventListener("dragstart", block)
-      el.removeEventListener("pointerdown", block)
     }
   }, [])
 
+  if (loading) {
+    return (
+      <div className="grid gap-2 select-none">
+        <span className="text-sm text-muted-foreground font-medium">Aadhaar Document</span>
+        <div className="rounded-md border p-8 bg-muted/20 flex items-center justify-center">
+          <Spinner className="h-6 w-6" />
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="grid gap-2 select-none">
+        <span className="text-sm text-muted-foreground font-medium">Aadhaar Document</span>
+        <div className="rounded-md border p-4 bg-muted/20">
+          <p className="text-sm text-destructive">Error: {error}</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div ref={containerRef} className="grid gap-2 select-none">
-      <span className="text-sm text-muted-foreground font-medium">Aadhaar Image</span>
+      <span className="text-sm text-muted-foreground font-medium">Aadhaar Document</span>
       <div className="rounded-md border p-2 bg-muted/20">
-        <canvas ref={canvasRef} className="w-full h-auto rounded-md" />
-        <p className="mt-2 text-xs text-muted-foreground">Viewing only. Download/print is disabled.</p>
+        {imageUrl && (
+          <div className="space-y-2">
+            {/* Try to display as image first */}
+            <img
+              src={imageUrl}
+              alt="Aadhaar Document"
+              className="w-full h-auto rounded-md object-contain"
+              style={{ 
+                filter: 'blur(0.5px)',
+                maxHeight: '800px',
+                minHeight: '400px'
+              }}
+              onError={(e) => {
+                // If image fails to load, try as PDF in iframe
+                const target = e.target as HTMLImageElement
+                const parent = target.parentElement
+                if (parent) {
+                  parent.innerHTML = `
+                    <iframe
+                      src="${imageUrl}"
+                      className="w-full rounded-md"
+                      style="height: 600px; min-height: 400px;"
+                      title="Aadhaar Document"
+                    ></iframe>
+                  `
+                }
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Document ID: {watermark} | Viewing only. Download/print is disabled.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-async function loadPdfJsFromCdn(): Promise<any> {
-  if (typeof window === "undefined") throw new Error("No window")
-  const w = window as any
-  if (w.pdfjsLib) return w.pdfjsLib
-  await new Promise<void>((resolve, reject) => {
-    const s = document.createElement("script")
-    s.src = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"
-    s.async = true
-    s.onload = () => resolve()
-    s.onerror = () => reject(new Error("Failed to load pdf.js"))
-    document.head.appendChild(s)
-  })
-  return (window as any).pdfjsLib
-}

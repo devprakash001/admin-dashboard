@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/19pays/sidebar"
 import { Navbar } from "@/components/19pays/navbar"
 import { Spinner } from "@/components/ui/spinner"
+import { SessionManager } from "@/components/session-manager"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -35,6 +36,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-dvh">
+      <SessionManager />
       <div className="flex flex-col md:flex-row">
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0">
